@@ -1,0 +1,21 @@
+{
+  "name": "code-builts",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "CODE BUILTS — Build Smart. Build Better. Digital solutions studio.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@fontsource-variable/geist": "^5.3.0",
+    "@fontsource-variable/geist-mono": "^5.3.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "vite": "^7.1.12"
+  }
+}
