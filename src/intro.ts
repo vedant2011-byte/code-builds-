@@ -2,7 +2,7 @@
  * CODE BUILTS — intro engine
  *
  * A single, deterministic sequence:
- *   loader (real asset progress) → film 01 → film 02 (four touches) → site
+ *   loader (real asset progress) → film 01 → film 02 (four scroll steps) → site
  *
  * Everything degrades gracefully: a failed download, blocked autoplay, reduced
  * motion or data-saver all lead to the site rather than a dead screen.
@@ -17,12 +17,10 @@ type Chapter = {
   title: string;
   copy: string;
   hint: string;
-  x: number;
-  y: number;
 };
 
-/* Chapter boundaries are cut from the real footage — each touch continues the
-   same continuous camera move exactly where the previous one stopped. */
+/* Chapter boundaries are cut from the real footage — each scroll step continues
+   the same continuous camera move exactly where the previous one stopped. */
 const CHAPTERS: Chapter[] = [
   {
     start: 0,
@@ -30,8 +28,6 @@ const CHAPTERS: Chapter[] = [
     title: 'THE PAPER',
     copy: 'A blank sheet becomes an idea.',
     hint: 'ENTER THE WORLD',
-    x: 50,
-    y: 44,
   },
   {
     start: 2.5,
@@ -39,8 +35,6 @@ const CHAPTERS: Chapter[] = [
     title: 'THE BUILD',
     copy: 'The world organises itself around the page.',
     hint: 'MOVE CLOSER',
-    x: 63,
-    y: 57,
   },
   {
     start: 5.3,
@@ -48,8 +42,6 @@ const CHAPTERS: Chapter[] = [
     title: 'THE CITY',
     copy: 'Roads, towers, systems — connection at scale.',
     hint: 'GO WIDER',
-    x: 43,
-    y: 63,
   },
   {
     start: 7.9,
@@ -57,8 +49,6 @@ const CHAPTERS: Chapter[] = [
     title: 'THE HORIZON',
     copy: 'What you build keeps growing.',
     hint: 'SEE IT ALL',
-    x: 50,
-    y: 55,
   },
 ];
 
@@ -147,9 +137,6 @@ export function initIntro(): IntroControls {
   const dots = Array.from(dotsEl.querySelectorAll('span'));
   const sceneHint = el('sceneHint', intro)!;
 
-  const hotspot = el<HTMLButtonElement>('hotspot', intro)!;
-  const hotspotLabel = el('hotspotLabel', intro)!;
-
   const logoImg = intro.querySelector<HTMLImageElement>('.loader__logo');
 
   /* ------------------------------------------------------------------ state */
@@ -162,6 +149,7 @@ export function initIntro(): IntroControls {
   let playing = false;
   let scene1Timer = 0;
   let idleTimer = 0;
+  let scrollLock = 0;
 
   /* ---------------------------------------------------------------- loading */
   const source = { ready: 0, fonts: 0, media: 0 };
@@ -354,7 +342,7 @@ export function initIntro(): IntroControls {
 
       video2.currentTime = 0;
       setChapter(0);
-      showHotspot();
+      armScroll();
     } catch {
       showFilmFallback(video2, () => {
         toSite();
@@ -368,9 +356,6 @@ export function initIntro(): IntroControls {
     chapterIndexEl.textContent = `SCENE 0${index + 1} / 04`;
     chapterTitleEl.textContent = chapter.title;
     chapterCopyEl.textContent = chapter.copy;
-    hotspotLabel.textContent = `TOUCH 0${index + 1} — ${chapter.hint}`;
-    hotspot.style.left = `${chapter.x}%`;
-    hotspot.style.top = `${chapter.y}%`;
     dots.forEach((dot, i) => dot.classList.toggle('is-on', i <= index));
 
     chapterWrap.classList.remove('is-swapping');
@@ -378,26 +363,27 @@ export function initIntro(): IntroControls {
     chapterWrap.classList.add('is-swapping');
   }
 
-  function showHotspot() {
+  /* The film waits for a deliberate scroll. Wheel, touch and keyboard all count,
+     with a short lock so one gesture cannot skip a chapter. */
+  function armScroll() {
     window.clearTimeout(idleTimer);
     idleTimer = window.setTimeout(() => {
-      if (stage === 'film2') void playChapter(chapterIndex);
+      if (stage === 'film2' && !playing) void playChapter(chapterIndex);
     }, 16000);
-    hotspot.hidden = false;
-    hotspot.setAttribute(
-      'aria-label',
-      `Touch ${chapterIndex + 1} of 4: ${CHAPTERS[chapterIndex].title}. ${CHAPTERS[chapterIndex].hint}`,
-    );
-    requestAnimationFrame(() => hotspot.classList.add('is-visible'));
-    sceneHint.textContent = 'TOUCH THE CIRCLE TO GO DEEPER';
+    sceneHint.textContent = `SCROLL TO ${CHAPTERS[chapterIndex].hint}`;
+    scrollLock = performance.now() + 480;
   }
 
-  function hideHotspot() {
+  function disarmScroll() {
     window.clearTimeout(idleTimer);
-    hotspot.classList.remove('is-visible');
-    window.setTimeout(() => {
-      if (!hotspot.classList.contains('is-visible')) hotspot.hidden = true;
-    }, 300);
+  }
+
+  function requestAdvance() {
+    if (stage !== 'film2' || playing) return;
+    if (performance.now() < scrollLock) return;
+    scrollLock = performance.now() + 700;
+    disarmScroll();
+    void playChapter(chapterIndex);
   }
 
   function seekTo(time: number) {
@@ -418,7 +404,7 @@ export function initIntro(): IntroControls {
 
   async function playChapter(index: number) {
     if (!video2 || stage !== 'film2') return;
-    hideHotspot();
+    disarmScroll();
     setChapter(index);
     await seekTo(CHAPTERS[index].start);
     if (stage !== 'film2') return;
@@ -440,7 +426,7 @@ export function initIntro(): IntroControls {
       playing = false;
       if (chapterIndex < CHAPTERS.length - 1) {
         setChapter(chapterIndex + 1);
-        showHotspot();
+        armScroll();
       } else {
         sceneHint.textContent = 'END OF FILM';
         window.setTimeout(() => {
@@ -450,8 +436,50 @@ export function initIntro(): IntroControls {
     }
   });
 
-  hotspot.addEventListener('click', () => {
-    void playChapter(chapterIndex);
+  window.addEventListener(
+    'wheel',
+    (event) => {
+      if (event.deltaY > 6) requestAdvance();
+    },
+    { passive: true },
+  );
+
+  let touchY = 0;
+  let touchX = 0;
+
+  window.addEventListener(
+    'touchstart',
+    (event) => {
+      const point = event.touches[0];
+      if (!point) return;
+      touchY = point.clientY;
+      touchX = point.clientX;
+    },
+    { passive: true },
+  );
+
+  window.addEventListener(
+    'touchmove',
+    (event) => {
+      if (stage !== 'film2') return;
+      const point = event.touches[0];
+      if (!point) return;
+      const rise = touchY - point.clientY;
+      const drift = Math.abs(touchX - point.clientX);
+      if (rise > 34 && rise > drift) {
+        touchY = point.clientY;
+        requestAdvance();
+      }
+    },
+    { passive: true },
+  );
+
+  window.addEventListener('keydown', (event) => {
+    if (stage !== 'film2') return;
+    if (['ArrowDown', 'PageDown', 'Enter', ' ', 'Spacebar'].includes(event.key)) {
+      event.preventDefault();
+      requestAdvance();
+    }
   });
 
   /* -------------------------------------------------------------------- done */
@@ -496,8 +524,6 @@ export function initIntro(): IntroControls {
     scene1.hidden = true;
     scene2.classList.remove('is-active');
     scene1.classList.remove('is-active');
-    hotspot.classList.remove('is-visible');
-    hotspot.hidden = true;
     window.clearTimeout(scene1Timer);
     window.clearTimeout(idleTimer);
     document.documentElement.classList.add('intro-started');
@@ -534,7 +560,7 @@ export function initIntro(): IntroControls {
     box.className = 'film-fallback';
     box.innerHTML = `
       <p>The film could not autoplay on this device. You can start it manually or continue to the studio.</p>
-      <button class="btn btn--orange" type="button" data-fallback="play">Play film</button>
+      <button class="btn btn--accent" type="button" data-fallback="play">Play film</button>
       <button class="btn btn--ghost" type="button" data-fallback="skip">Continue to site</button>
     `;
     box.querySelector('[data-fallback="play"]')?.addEventListener('click', () => {

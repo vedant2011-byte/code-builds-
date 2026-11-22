@@ -375,6 +375,54 @@ function initForm() {
   });
 }
 
+/* ---------------------------------------------------------------- hero stage */
+function initHeroStage() {
+  const hero = document.querySelector<HTMLElement>('.hero');
+  const mark = hero?.querySelector<HTMLElement>('.hero__mark');
+  if (!hero || !mark) return;
+  if (prefersReduced.matches) return;
+  if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
+
+  let frame = 0;
+  hero.addEventListener(
+    'pointermove',
+    (event) => {
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        const box = hero.getBoundingClientRect();
+        const x = (event.clientX - box.left) / box.width - 0.5;
+        const y = (event.clientY - box.top) / box.height - 0.5;
+        mark.style.setProperty('--ry', `${(x * 9).toFixed(2)}deg`);
+        mark.style.setProperty('--rx', `${(-y * 7).toFixed(2)}deg`);
+      });
+    },
+    { passive: true },
+  );
+
+  hero.addEventListener('pointerleave', () => {
+    mark.style.setProperty('--rx', '0deg');
+    mark.style.setProperty('--ry', '0deg');
+  });
+}
+
+/* ------------------------------------------------------------------- press */
+/** A soft yellow press wave from the pointer, plus the CSS press settle. */
+function initPressFeedback() {
+  document.querySelectorAll<HTMLElement>('.btn').forEach((btn) => {
+    btn.addEventListener('pointerdown', (event) => {
+      const box = btn.getBoundingClientRect();
+      const wave = document.createElement('span');
+      wave.className = 'btn__ripple';
+      wave.setAttribute('aria-hidden', 'true');
+      wave.style.left = `${event.clientX - box.left}px`;
+      wave.style.top = `${event.clientY - box.top}px`;
+      btn.appendChild(wave);
+      wave.addEventListener('animationend', () => wave.remove());
+    });
+  });
+}
+
 /* ---------------------------------------------------------------------- misc */
 function initMisc() {
   const year = document.querySelector<HTMLElement>('[data-el="year"]');
@@ -387,6 +435,8 @@ export function initUI() {
   initServices();
   initSteps();
   initForm();
+  initHeroStage();
+  initPressFeedback();
   initMisc();
   startReveals();
 }

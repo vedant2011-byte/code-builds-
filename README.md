@@ -1,7 +1,7 @@
 # CODE BUILTS — Build Smart. Build Better.
 
 A production website for CODE BUILTS: a cinematic brand intro (two reconstructed films), a
-four-touch interactive film, and a full editorial agency site.
+four-step scroll film, and a full editorial agency site.
 
 Built with **Vite + TypeScript + hand-authored CSS**. No UI framework, no runtime animation
 library. Self-hosted Geist. Everything ships as static files.
@@ -23,8 +23,13 @@ npm run preview   # serve dist/
 | --- | --- |
 | Loader | Real asset progress: logo decode, font loading, and the actual bytes of `film-01.mp4` (streamed via XHR into a blob). Minimum display ~1.1 s to avoid a flash, no fake timer. |
 | Film 01 | `film-01.mp4` autoplays muted, inline. The progress rail tracks real playback. On end → Film 02. |
-| Film 02 | Four **touch** interactions. Each touch plays one chapter of the same continuous camera move (`0–2.5s`, `2.5–5.3s`, `5.3–7.9s`, `7.9–9.96s`), seeks within a single preloaded `<video>` element, and pauses at the next hold point. The fourth chapter opens the site. |
+| Film 02 | Four **scroll** steps. Each scroll gesture (wheel, swipe or ArrowDown/PageDown) plays one chapter of the same continuous camera move (`0–2.5s`, `2.5–5.3s`, `5.3–7.9s`, `7.9–9.96s`), seeks within a single preloaded `<video>` element, and pauses at the next hold point. The fourth chapter opens the site. |
 | Site | Overlay is removed, scroll unlocks, nav drops in. |
+
+Framing: the source footage is portrait (720×1280) and fills the viewport edge to edge at every
+size. Phones show the native 9:16 frame; from 901 px up the same video is reframed for landscape
+(`object-fit: cover` with a lifted `object-position` per film, so the subject stays in shot) and the
+chapter rails overlay the image. Nothing is stretched and no second encode exists.
 
 The sequence plays in full — there are no skip buttons. Escape hatches exist only for failure:
 
@@ -37,7 +42,7 @@ The sequence plays in full — there are no skip buttons. Escape hatches exist o
 - Film 02 advances on its own after 16 s of no interaction, so the story never stalls.
 
 Each scene must be seen: the loader cannot be skipped, film 01 advances on its own, and film 02
-moves on when a touch is used (or after 16 s of no interaction).
+moves on when the visitor scrolls (or after 16 s of no interaction).
 
 ## 2. Media pipeline (already run)
 
@@ -49,21 +54,25 @@ film, frames in order `001–300`).
 unzip -q clean_Miniature_workers_building_typew_f67b49b01-ezgif-split.zip -d assets/frames/v1
 unzip -q clean_Typewriter_miniature_constructio_7105981f-ezgif-split.zip -d assets/frames/v2
 
-# 2. Rebuild at exactly 30 FPS, preserving 720×1280, H.264 / yuv420p / faststart
+# 2. Rebuild at exactly 30 FPS, native 720×1280, H.264 / yuv420p / faststart.
+#    The source frames carry heavy grain, which reads as noise once the film is
+#    full-bleed, so the chain is: non-local means denoise → gentle sharpen → CRF 23.
+#    (hqdn3d smeared the miniature detail; a bare CRF pass kept the grain.)
 ffmpeg -framerate 30 -i assets/frames/v1/ezgif-frame-%03d.jpg \
-  -vf hqdn3d=1.5:1.5:7:7 -c:v libx264 -profile:v high -level 4.0 -pix_fmt yuv420p \
-  -crf 32 -preset slow -g 30 -keyint_min 30 -sc_threshold 0 -movflags +faststart -an \
-  public/media/film-01.mp4
+  -vf "nlmeans=s=7:p=5:r=13,unsharp=5:5:0.6:5:5:0,format=yuv420p" \
+  -c:v libx264 -profile:v high -level 4.0 -crf 23 -preset slow \
+  -g 30 -keyint_min 30 -sc_threshold 0 -movflags +faststart -an public/media/film-01.mp4
 
-# 3. Same for v2 → public/media/film-02.mp4
+# 3. Identical chain for v2 → public/media/film-02.mp4 (nlmeans is slow: ~2 min each)
 ```
 
 Verified output (`ffprobe -count_frames`):
 
-- `film-01.mp4` — 300 frames, 30/1 fps, 10.000 s, 720×1280, 1.55 MB
-- `film-02.mp4` — 300 frames, 30/1 fps, 10.000 s, 720×1280, 2.68 MB
+- `film-01.mp4` — 300 frames, 30/1 fps, 10.000 s, 720×1280, 4.1 MB, CRF 23, denoised
+- `film-02.mp4` — 300 frames, 30/1 fps, 10.000 s, 720×1280, 7.4 MB, CRF 23, denoised
 
-Posters (`film-01-poster.jpg`, `film-02-poster.jpg`) are frame 001 of each film; the hero still
+Posters (`film-01-poster.jpg`, `film-02-poster.jpg`) are frame 001 of each film, run through the same
+denoise/sharpen chain and exported at `-q:v 3` so the first paint matches the video; the hero still
 comes from a later frame of film 01. WebM/VP9 was tested and produced
 *larger* files than H.264 for this footage, so only MP4 is shipped. The extracted frame
 folders (`assets/frames/`) were removed after verification; the original ZIPs are untouched
@@ -90,7 +99,7 @@ To deliver enquiries server-side instead:
 ```
 index.html              semantic markup, SEO, JSON-LD, intro shell
 src/main.ts             entry
-src/intro.ts            loader, film state machine, four-touch chapters
+src/intro.ts            loader, film state machine, four scroll chapters
 src/ui.ts               reveals, nav, menu, accordions, process timeline, form
 src/styles/base.css     tokens, type, buttons, nav, hero, footer
 src/styles/site.css     sections, services, approach, mission/vision, contact
