@@ -1,8 +1,21 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
     {
       "source": "/api/:path*",
       "destination": "https://code-builts.codebuilds.workers.dev/api/:path*"
+    },
+    {
+      "source": "/the-letter",
+      "destination": "/the-letter.html"
+    },
+    {
+      "source": "/admin",
+      "destination": "/admin.html"
+    },
+    {
+      "source": "/admin/:path*",
+      "destination": "/admin.html"
     }
   ]
 }

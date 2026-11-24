@@ -250,6 +250,13 @@ right format.
 `/api/:path*` to the Worker. No CORS is involved and the admin cookie stays same-origin. Re-deploy
 the Vercel project after changing `vercel.json` or the Worker host.
 
+Vercel serves `dist/` statically, and Vite emits `index.html`, `the-letter.html` and `admin.html`,
+so `vercel.json` also maps the clean URLs the site links to: `/the-letter` → `/the-letter.html`,
+`/admin` and `/admin/:path*` (e.g. `/admin/login`, `/admin/arcade`) → `/admin.html`. Without those
+rewrites Vercel answers those paths with its own `404 NOT_FOUND`, while the Worker origin still
+works — that mismatch is what broke the production dashboard. Keep the `/api/:path*` rewrite first;
+nothing falls back to `/index.html`, so unknown paths stay 404.
+
 **Freebuff Sites** — add a D1 database with binding `DB` to the environment, then deploy the
 prebuilt manifest in `deploy.json` (`worker/dist/index.js` + `dist/`). Sites injects `DB`,
 `APP_ORIGIN` and the platform variables; set the three admin secrets in Sites → Secrets, then
@@ -266,8 +273,9 @@ Required variables:
 | `ENVIRONMENT` | Optional label |
 
 The Worker serves `/the-letter`, `/admin/*` and `/api/*` itself and falls through to `dist/` for
-everything else, so the deployment must route unknown paths to the Worker (assets with
-`run_worker_first` in `wrangler.jsonc`, or the Sites manifest).
+everything else, so a Worker-hosted deployment needs no extra routing (assets with
+`run_worker_first` in `wrangler.jsonc`, or the Sites manifest). A static host such as Vercel has to
+map those clean URLs itself — see the `vercel.json` rewrites above.
 
 ## 11. Before launch / known limitations
 
@@ -276,7 +284,7 @@ everything else, so the deployment must route unknown paths to the Worker (asset
   the Worker. The coupon card reuses the same WhatsApp number.
 - Arcade scores are server-checked (see §3) but not uncheatable; review flagged sessions and
   pending claims in the admin.
-- Automated coverage is the API/integration suite (`npm run test:api`, 63 assertions) plus type and
+- Automated coverage is the API/integration suite (`npm run test:api`, 71 assertions) plus type and
   production builds. The canvas game loop, typewriter animation and CSS transitions run on
   `requestAnimationFrame`/timers and were not exercised visually in the last run (the shared
   browser tab reported `visibilityState: "hidden"`, which freezes both). Play a full run and open
