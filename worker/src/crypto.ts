@@ -70,7 +70,9 @@ export async function verifyPassword(password: string, stored: string): Promise<
   if (parts.length !== 5 || parts[0] !== 'pbkdf2' || parts[1] !== 'sha256') return false;
 
   const iterations = Number(parts[2]);
-  if (!Number.isInteger(iterations) || iterations < 100_000 || iterations > 1_000_000) return false;
+  // Workers caps PBKDF2 at 100000 iterations per call, so nothing above it can
+  // ever be verified on the deployed Worker.
+  if (iterations !== 100_000) return false;
 
   let salt: Uint8Array;
   let expected: Uint8Array;

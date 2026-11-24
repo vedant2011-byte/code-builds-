@@ -8,7 +8,18 @@
 
 import type { PublicArcadeConfig } from '../shared/arcade';
 
-type Phase = 'intro' | 'playing' | 'paused' | 'result' | 'claim' | 'coupon';
+type Phase =
+  | 'idle'
+  | 'initializing'
+  | 'ready'
+  | 'playing'
+  | 'paused'
+  | 'game_over'
+  | 'error'
+  | 'claim'
+  | 'coupon';
+
+type OverlayName = 'intro' | 'paused' | 'result' | 'claim' | 'coupon';
 
 interface CouponPayload {
   code: string;
@@ -41,29 +52,52 @@ const SOUND_KEY = 'cb.arcade.sound';
 const POINTS_PER_BOUNCE = 10;
 const MIN_BOUNCE_GAP = 125;
 
-function api<T>(path: string, body?: unknown, method = 'POST'): Promise<T> {
-  return fetch(path, {
-    method,
-    headers: body === undefined ? undefined : { 'content-type': 'application/json' },
-    credentials: 'same-origin',
-    body: body === undefined ? undefined : JSON.stringify(body),
-  }).then(async (response) => {
+const CONNECTION_ERROR = 'CONNECTION INTERRUPTED. TRY AGAIN.';
+const UNVERIFIED_ERROR = 'YOUR SCORE COULD NOT BE VERIFIED. PLEASE TRY AGAIN.';
+
+async function api<T>(path: string, body?: unknown, method = 'POST', timeoutMs = 12000): Promise<T> {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(path, {
+      method,
+      headers:
+        body === undefined
+          ? { accept: 'application/json' }
+          : { 'content-type': 'application/json', accept: 'application/json' },
+      credentials: 'same-origin',
+      cache: 'no-store',
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: controller.signal,
+    });
+
+    const type = response.headers.get('content-type') ?? '';
     let data: unknown = null;
-    try {
-      data = await response.json();
-    } catch {
-      data = null;
+    if (type.includes('json')) {
+      try {
+        data = await response.json();
+      } catch {
+        data = null;
+      }
     }
+
     if (!response.ok) {
       const shape = data as ApiErrorShape | null;
       throw new ArcadeApiError(
-        shape?.error?.message ?? 'Something went wrong. Please try again.',
+        shape?.error?.message ?? CONNECTION_ERROR,
         response.status,
-        shape?.error?.code ?? 'ERROR',
+        shape?.error?.code ?? 'HTTP_ERROR',
       );
     }
+    // A 200 that is not JSON means the API path is not reaching the Worker.
+    if (data === null) throw new ArcadeApiError(CONNECTION_ERROR, 0, 'API_UNREACHABLE');
     return data as T;
-  });
+  } catch (error) {
+    if (error instanceof ArcadeApiError) throw error;
+    throw new ArcadeApiError(CONNECTION_ERROR, 0, 'NETWORK');
+  } finally {
+    window.clearTimeout(timer);
+  }
 }
 
 function readBest(): number {
@@ -91,13 +125,16 @@ class Arcade {
   private ctx!: CanvasRenderingContext2D;
   private stage!: HTMLElement;
 
-  private phase: Phase = 'intro';
+  private phase: Phase = 'idle';
   private config: PublicArcadeConfig | null = null;
-  private starting = false;
+  private canStart = true;
+  private startAttempt = 0;
+  private finishing = false;
+  private lastDurationMs = 0;
 
   private sessionId: string | null = null;
   private sessionToken: string | null = null;
-  private rewardPossible = false;
+  private sessionVerified = false;
   private queue: { seq: number; t: number }[] = [];
   private seq = 0;
   private flushTimer = 0;
@@ -122,7 +159,6 @@ class Arcade {
   private raf = 0;
   private lastTs = 0;
   private reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
-  private resumeAfterHide = false;
 
   private soundOn = window.localStorage.getItem(SOUND_KEY) === 'on';
   private audio: AudioContext | null = null;
@@ -165,7 +201,7 @@ class Arcade {
     });
   }
 
-  private showOverlay(name: Phase | 'result' | 'paused'): void {
+  private showOverlay(name: OverlayName): void {
     this.qa<HTMLElement>('[data-arcade-overlay]').forEach((el) => {
       el.hidden = el.dataset.arcadeOverlay !== name;
     });
@@ -200,7 +236,13 @@ class Arcade {
       button.addEventListener('click', () => this.openClaim()),
     );
     this.qa<HTMLButtonElement>('[data-arcade-claim-back]').forEach((button) =>
-      button.addEventListener('click', () => this.showOverlay('result')),
+      button.addEventListener('click', () => {
+        this.phase = 'game_over';
+        this.showOverlay('result');
+      }),
+    );
+    this.qa<HTMLButtonElement>('[data-arcade-retry]').forEach((button) =>
+      button.addEventListener('click', () => void this.retryFinish()),
     );
     this.qa<HTMLButtonElement>('[data-arcade-copy]').forEach((button) =>
       button.addEventListener('click', () => void this.copyCode()),
@@ -223,12 +265,9 @@ class Arcade {
     window.addEventListener('keydown', (event) => this.onKeyDown(event));
     window.addEventListener('keyup', (event) => this.onKeyUp(event));
     document.addEventListener('visibilitychange', () => {
-      if (document.hidden && this.phase === 'playing') {
-        this.resumeAfterHide = true;
-        this.pause();
-      } else if (!document.hidden && this.resumeAfterHide) {
-        this.resumeAfterHide = false;
-      }
+      // Backgrounding pauses the run; it only resumes when the player asks, so a
+      // phone returning to Instagram never drops a moving ball on them.
+      if (document.hidden && this.phase === 'playing') this.pause();
     });
 
     const ResizeCtor = window.ResizeObserver;
@@ -254,20 +293,26 @@ class Arcade {
 
   private async loadConfig(): Promise<void> {
     try {
-      const data = await api<{ config: PublicArcadeConfig }>('/api/arcade/config', undefined, 'GET');
+      const data = await api<{ config: PublicArcadeConfig }>(
+        '/api/arcade/config',
+        undefined,
+        'GET',
+        10000,
+      );
       this.config = data.config;
       this.renderTiers(data.config);
       if (!data.config.arcadeEnabled) {
-        this.setStatus('The arcade is taking a short break. Please check back soon.');
-        this.qa<HTMLButtonElement>('[data-arcade-start]').forEach((button) => {
-          button.disabled = true;
-        });
+        this.canStart = false;
+        this.phase = 'error';
+        this.startEnabled(false);
+        this.setStatus('THE ARCADE IS TAKING A SHORT BREAK. PLEASE CHECK BACK SOON.');
+        return;
       }
+      this.phase = 'ready';
     } catch {
-      this.setStatus('The arcade could not reach the server. Reload the page to play for a reward.');
-      this.qa<HTMLButtonElement>('[data-arcade-start]').forEach((button) => {
-        button.disabled = true;
-      });
+      // A failed probe must never kill the start button: the session request is
+      // the real gate, and it reports the actual problem when START is pressed.
+      this.phase = 'ready';
     }
   }
 
@@ -343,47 +388,88 @@ class Arcade {
     this.queue = [];
     this.sessionId = null;
     this.sessionToken = null;
-    this.rewardPossible = false;
+    this.sessionVerified = false;
     this.pendingClaim = null;
     this.resultEligible = false;
+    this.lastDurationMs = 0;
     this.trail = [];
+    this.pauseButton(false);
+    this.hideRetry();
     this.soundFeedback();
     this.syncScore();
     this.setStatus('');
     this.resetBall();
   }
 
+  private startEnabled(enabled: boolean): void {
+    this.qa<HTMLButtonElement>('[data-arcade-start]').forEach((button) => {
+      button.disabled = !enabled;
+    });
+  }
+
+  /**
+   * The one start lifecycle shared by START GAME, PLAY AGAIN and RESTART.
+   *
+   * A run becomes PLAYING only after the Worker has created a session, so the
+   * paddle and the score are never live for a run the server cannot verify.
+   */
   private async start(): Promise<void> {
-    if (this.starting) return;
-    this.starting = true;
+    if (this.phase === 'initializing') return;
+    if (!this.canStart) return;
+
+    const attempt = ++this.startAttempt;
     this.stopLoop();
-    this.hideOverlays();
     this.resetState();
-    this.phase = 'playing';
+    this.phase = 'initializing';
+    this.showOverlay('intro');
+    this.setStatus('CONNECTING TO GAME…');
+    this.startEnabled(false);
 
     try {
-      const data = await api<{
-        sessionId: string;
-        sessionToken: string;
-      }>('/api/arcade/sessions', {});
+      this.setStatus('PREPARING YOUR GAME…');
+      const data = await api<{ sessionId: string; sessionToken: string }>(
+        '/api/arcade/sessions',
+        {},
+        'POST',
+        15000,
+      );
+      if (attempt !== this.startAttempt) return;
+      if (!data || typeof data.sessionId !== 'string' || typeof data.sessionToken !== 'string') {
+        throw new ArcadeApiError(CONNECTION_ERROR, 0, 'BAD_SESSION');
+      }
+
       this.sessionId = data.sessionId;
       this.sessionToken = data.sessionToken;
-      this.rewardPossible = true;
+      // Only the Worker's own 201 marks a run as verified.
+      this.sessionVerified = true;
+      this.phase = 'playing';
+      this.startTime = performance.now();
+      this.lastBounceAt = 0;
+      this.resetBall();
+      this.hideOverlays();
+      this.setStatus('SESSION VERIFIED.');
+      this.startEnabled(true);
+      this.beginLoop();
+      this.canvas.focus({ preventScroll: true });
+      this.flushTimer = window.setInterval(() => void this.flush(), 1400);
     } catch (error) {
-      this.rewardPossible = false;
-      this.setStatus(
-        error instanceof ArcadeApiError
-          ? `${error.message} This run will not unlock a reward.`
-          : 'This run will not be saved for a reward.',
-      );
+      if (attempt !== this.startAttempt) return;
+      this.stopLoop();
+      this.sessionId = null;
+      this.sessionToken = null;
+      this.sessionVerified = false;
+      this.phase = 'error';
+      this.showOverlay('intro');
+      this.startEnabled(true);
+      const friendly =
+        error instanceof ArcadeApiError &&
+        error.code !== 'NETWORK' &&
+        error.code !== 'API_UNREACHABLE' &&
+        error.code !== 'BAD_SESSION'
+          ? error.message
+          : CONNECTION_ERROR;
+      this.setStatus(friendly);
     }
-
-    this.startTime = performance.now();
-    this.lastBounceAt = 0;
-    this.starting = false;
-    this.beginLoop();
-    this.canvas.focus({ preventScroll: true });
-    this.flushTimer = window.setInterval(() => void this.flush(), 1400);
   }
 
   private beginLoop(): void {
@@ -495,20 +581,49 @@ class Arcade {
   }
 
   private async endRun(): Promise<void> {
+    if (this.phase !== 'playing') return;
     this.stopLoop();
-    const durationMs = Math.round(performance.now() - this.startTime);
-    this.phase = 'result';
+    this.lastDurationMs = Math.max(0, Math.round(performance.now() - this.startTime));
+    this.phase = 'game_over';
     this.ball.vy = 0;
     this.blip(140, 0.16, 'sine', 0.05);
+    await this.finishRun();
+  }
+
+  /**
+   * Ask the Worker to verify the run. The displayed reward always comes from
+   * that response; a failed request keeps the score on screen and offers a
+   * retry instead of inventing a discount.
+   */
+  private async finishRun(): Promise<void> {
+    if (this.finishing || this.phase !== 'game_over') return;
+    this.finishing = true;
+    this.hideRetry();
 
     let finalScore = this.score;
     let discount = 0;
     let eligible = false;
     let verified = false;
     let claimed = false;
+    let retryable = false;
 
-    if (this.rewardPossible && this.sessionId && this.sessionToken) {
-      await this.flush();
+    if (!this.sessionId || !this.sessionToken || !this.sessionVerified) {
+      this.setStatus(UNVERIFIED_ERROR);
+    } else {
+      this.setStatus('VERIFYING YOUR SCORE…');
+
+      // Send bounces still queued, with one more try if the network hiccups.
+      for (
+        let attempt = 0;
+        attempt < 2 && this.queue.length > 0 && this.sessionVerified;
+        attempt += 1
+      ) {
+        await this.flush();
+        if (this.queue.length > 0 && this.sessionVerified) {
+          await new Promise((resolve) => window.setTimeout(resolve, 350));
+        }
+      }
+
       try {
         const result = await api<{
           verified: boolean;
@@ -517,40 +632,61 @@ class Arcade {
           claimEligible: boolean;
           claimed?: boolean;
           reasons?: string[];
-        }>(`/api/arcade/sessions/${encodeURIComponent(this.sessionId)}/finish`, {
-          token: this.sessionToken,
-          durationMs,
-        });
-        verified = result.verified;
+        }>(
+          `/api/arcade/sessions/${encodeURIComponent(this.sessionId)}/finish`,
+          { token: this.sessionToken, durationMs: this.lastDurationMs },
+          'POST',
+          15000,
+        );
+        verified = result.verified === true;
         finalScore = typeof result.score === 'number' ? result.score : finalScore;
         discount = result.discount ?? 0;
         eligible = Boolean(result.claimEligible);
         claimed = Boolean(result.claimed);
-        if (!verified) {
-          this.setStatus('This run could not be verified, so no reward was issued.');
-        }
+        if (!verified) this.setStatus(UNVERIFIED_ERROR);
       } catch (error) {
-        this.setStatus(
-          error instanceof ArcadeApiError
-            ? `${error.message} No reward was issued for this run.`
-            : 'We could not verify this run with the server. No reward was issued.',
-        );
+        if (error instanceof ArcadeApiError && error.status === 409) {
+          retryable = error.code !== 'SESSION_EXPIRED';
+          this.setStatus(
+            error.code === 'SESSION_EXPIRED'
+              ? 'THIS RUN EXPIRED BEFORE IT COULD BE VERIFIED. PLEASE TRY AGAIN.'
+              : UNVERIFIED_ERROR,
+          );
+        } else {
+          retryable = true;
+          this.setStatus(CONNECTION_ERROR);
+        }
       }
-    } else if (!this.rewardPossible) {
-      this.setStatus('This run was played without a verified session, so no reward was issued.');
     }
 
     if (!verified) discount = 0;
     if (claimed) {
       eligible = false;
-      this.setStatus('This run has already been claimed. Play again for another chance.');
+      this.setStatus('THIS RUN HAS ALREADY BEEN CLAIMED. PLAY AGAIN FOR ANOTHER CHANCE.');
     }
 
     this.score = finalScore;
-    this.resultEligible = eligible && discount > 0;
+    this.resultEligible = verified && eligible && discount > 0;
     this.updateBest(finalScore);
     this.syncScore();
     this.showResult(finalScore, discount, claimed);
+    this.showRetry(retryable);
+    this.finishing = false;
+  }
+
+  private async retryFinish(): Promise<void> {
+    if (this.phase !== 'game_over') return;
+    await this.finishRun();
+  }
+
+  private showRetry(visible: boolean): void {
+    this.qa<HTMLButtonElement>('[data-arcade-retry]').forEach((button) => {
+      button.hidden = !visible;
+    });
+  }
+
+  private hideRetry(): void {
+    this.showRetry(false);
   }
 
   private showResult(score: number, discount: number, claimed: boolean): void {
@@ -757,13 +893,12 @@ class Arcade {
       this.queue.splice(0, batch.length);
     } catch (error) {
       if (error instanceof ArcadeApiError && (error.status === 409 || error.status === 403)) {
-        this.rewardPossible = false;
-        this.sessionId = null;
-        this.sessionToken = null;
+        // The Worker refused the run; stop sending and let finish report the truth.
+        this.sessionVerified = false;
         this.queue = [];
-        this.setStatus('This run could not be verified by the server, so no reward will be issued.');
+        this.setStatus(UNVERIFIED_ERROR);
       }
-      // Network faults keep the queue for the next attempt.
+      // Network faults keep the queue for the next flush or the finish call.
     } finally {
       this.flushing = false;
     }
@@ -772,7 +907,7 @@ class Arcade {
   /* ------------------------------------------------------------------ claim */
 
   private openClaim(): void {
-    if (!this.resultEligible) return;
+    if (!this.resultEligible || this.phase !== 'game_over') return;
     this.phase = 'claim';
     this.showOverlay('claim');
     const error = this.q<HTMLElement>('[data-arcade-claim-error]');

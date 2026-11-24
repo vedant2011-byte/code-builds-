@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit && tsc -p tsconfig.worker.json --noEmit",
     "admin:hash": "node scripts/hash-password.mjs",
     "test:api": "node scripts/test-api.mjs",
+    "test:tiers": "node scripts/test-tiers.mjs",
     "db:migrate:local": "wrangler d1 execute code-builts-arcade --local --file=migrations/0001_init.sql --config wrangler.jsonc",
     "deploy:worker": "npm run build && wrangler deploy --config wrangler.jsonc"
   },

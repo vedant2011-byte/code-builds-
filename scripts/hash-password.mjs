@@ -20,7 +20,9 @@ if (password.length < 12) {
   process.exit(1);
 }
 
-const iterations = 210_000;
+// Cloudflare Workers refuses PBKDF2 iteration counts above 100000, so the
+// stored hash must stay at or below that limit.
+const iterations = 100_000;
 const salt = randomBytes(16);
 const hash = pbkdf2Sync(password, salt, iterations, 32, 'sha256');
 

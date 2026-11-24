@@ -227,16 +227,28 @@ Build first (the Worker bundle is generated, not committed):
 npm run build     # dist/ + worker/dist/index.js
 ```
 
-**Cloudflare directly**
+**Cloudflare directly — the live production API**
+
+The Worker is deployed on the Cloudflare account as `code-builts` and answers on
+`https://code-builts.codebuilds.workers.dev`. Its D1 database `code-builts-arcade`
+(`c1ca306a-f9e1-4edc-9721-88fc91bcea4a`) is already created and migrated, and the three admin
+secrets are already set. `wrangler.jsonc` carries both the real `database_id` and
+`APP_ORIGIN=https://codebuilds.vercel.app`.
 
 ```bash
-npx wrangler d1 create code-builts-arcade        # copy the database_id into wrangler.jsonc
-npx wrangler secret put ADMIN_EMAIL
-npx wrangler secret put ADMIN_PASSWORD_HASH
-npx wrangler secret put SESSION_SECRET
-npx wrangler secret put APP_ORIGIN               # e.g. https://codebuilts.com
-npx wrangler deploy --config wrangler.jsonc
+npx wrangler login
+npm run deploy:worker                            # build + deploy
+npx wrangler secret bulk work/prod-secrets.json  # ADMIN_EMAIL, ADMIN_PASSWORD_HASH, SESSION_SECRET
 ```
+
+`ADMIN_PASSWORD_HASH` must be generated at **100,000** PBKDF2 iterations or fewer — the Workers
+runtime rejects anything higher with `Pbkdf2 failed: iteration counts above 100000 are not
+supported`, which surfaces as a 500 on `POST /api/admin/login`. `npm run admin:hash` produces the
+right format.
+
+**Vercel frontend** — the site calls `/api/...` on its own origin, so `vercel.json` rewrites
+`/api/:path*` to the Worker. No CORS is involved and the admin cookie stays same-origin. Re-deploy
+the Vercel project after changing `vercel.json` or the Worker host.
 
 **Freebuff Sites** — add a D1 database with binding `DB` to the environment, then deploy the
 prebuilt manifest in `deploy.json` (`worker/dist/index.js` + `dist/`). Sites injects `DB`,
@@ -248,7 +260,7 @@ Required variables:
 | Name | Purpose |
 | --- | --- |
 | `ADMIN_EMAIL` | The only administrator address |
-| `ADMIN_PASSWORD_HASH` | `pbkdf2$sha256$210000$…` from `npm run admin:hash` |
+| `ADMIN_PASSWORD_HASH` | `pbkdf2$sha256$100000$…` from `npm run admin:hash` |
 | `SESSION_SECRET` | Long random string that signs the admin cookie |
 | `APP_ORIGIN` | Allowed origin(s), comma separated (Sites injects this) |
 | `ENVIRONMENT` | Optional label |
@@ -260,8 +272,6 @@ everything else, so the deployment must route unknown paths to the Worker (asset
 ## 11. Before launch / known limitations
 
 - Update `https://codebuilts.com` in `public/sitemap.xml` and `public/robots.txt` to the real domain.
-- `wrangler.jsonc` carries a placeholder `database_id` for local dev — replace it for direct
-  Wrangler deployments (Sites supplies its own binding).
 - The contact form still hands the enquiry to WhatsApp/email exactly as before; it does not post to
   the Worker. The coupon card reuses the same WhatsApp number.
 - Arcade scores are server-checked (see §3) but not uncheatable; review flagged sessions and

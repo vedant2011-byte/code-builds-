@@ -118,6 +118,36 @@ const duplicate = await call('/api/arcade/claims', {
 });
 check('duplicate claim returns the same coupon', duplicate.json?.duplicate === true && couponOf(duplicate)?.code === coupon.code);
 
+/* reward tier boundaries, verified by the Worker itself */
+const boundaries = [
+  [9, 90, 0],
+  [10, 100, 2],
+  [19, 190, 2],
+  [20, 200, 5],
+  [29, 290, 5],
+  [30, 300, 7],
+  [39, 390, 7],
+  [40, 400, 10],
+];
+
+for (const [hits, expectedScore, expectedDiscount] of boundaries) {
+  const tierSession = await makeSession();
+  await play(tierSession, hits, 130);
+  const tierFinish = await call(`/api/arcade/sessions/${tierSession.sessionId}/finish`, {
+    method: 'POST',
+    body: { token: tierSession.sessionToken, durationMs: hits * 130 + 250 },
+  });
+  check(
+    `${expectedScore} points unlocks ${expectedDiscount}%`,
+    tierFinish.status === 200 &&
+      tierFinish.json?.verified === true &&
+      tierFinish.json?.score === expectedScore &&
+      tierFinish.json?.discount === expectedDiscount &&
+      tierFinish.json?.claimEligible === (expectedDiscount > 0),
+    `${tierFinish.status} ${tierFinish.text}`.slice(0, 200),
+  );
+}
+
 /* low score gets nothing */
 const low = await makeSession();
 await play(low, 5, 200);

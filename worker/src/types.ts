@@ -27,7 +27,7 @@ export interface D1Database {
 
 export interface Env {
   DB: D1Database;
-  ASSETS: { fetch(request: Request): Promise<Response> };
+  ASSETS: { fetch(input: Request | string, init?: RequestInit): Promise<Response> };
   ADMIN_EMAIL?: string;
   ADMIN_PASSWORD_HASH?: string;
   SESSION_SECRET?: string;

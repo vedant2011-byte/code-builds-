@@ -17,7 +17,7 @@
     {
       "binding": "DB",
       "database_name": "code-builts-arcade",
-      "database_id": "00000000-0000-4000-8000-000000000000",
+      "database_id": "c1ca306a-f9e1-4edc-9721-88fc91bcea4a",
       "migrations_dir": "migrations"
     }
   ],
@@ -27,6 +27,9 @@
   },
 
   "vars": {
-    "ENVIRONMENT": "development"
+    "ENVIRONMENT": "production",
+    // Origins allowed to call the API (comma separated). Local values live in
+    // .dev.vars and override this during `wrangler dev`.
+    "APP_ORIGIN": "https://codebuilds.vercel.app,https://code-builts.codebuilds.workers.dev"
   }
 }
