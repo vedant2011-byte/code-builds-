@@ -1,6 +1,9 @@
 node_modules/
 dist/
+worker/dist/
 work/
+.wrangler/
+.dev.vars
 .cloud-attachments/
 .DS_Store
 *.log

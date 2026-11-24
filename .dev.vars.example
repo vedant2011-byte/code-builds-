@@ -1,0 +1,10 @@
+# Copy to `.dev.vars` for local development (never commit the real file).
+#
+# ADMIN_PASSWORD_HASH is generated with:
+#   npm run admin:hash -- "a long passphrase"
+ADMIN_EMAIL=you@example.com
+ADMIN_PASSWORD_HASH=pbkdf2$sha256$210000$REPLACE_WITH_SCRIPT_OUTPUT
+# Any long random string — it signs the admin session cookie.
+SESSION_SECRET=replace-with-64-random-characters
+# Local dev origin, so the Vite-proxied requests pass the origin check.
+APP_ORIGIN=http://127.0.0.1:5173,http://localhost:5173

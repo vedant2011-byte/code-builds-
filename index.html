@@ -238,6 +238,7 @@
         <nav class="nav__links" aria-label="Primary">
           <a href="#top">Home</a>
           <a href="#services">Services</a>
+          <a href="#arcade">Arcade</a>
           <a href="#about">About</a>
           <a href="#contact">Contact</a>
         </nav>
@@ -270,8 +271,9 @@
       <nav class="menu__links" aria-label="Mobile">
         <a href="#top"><span class="micro">01</span>Home</a>
         <a href="#services"><span class="micro">02</span>Services</a>
-        <a href="#about"><span class="micro">03</span>About</a>
-        <a href="#contact"><span class="micro">04</span>Contact</a>
+        <a href="#arcade"><span class="micro">03</span>Arcade</a>
+        <a href="#about"><span class="micro">04</span>About</a>
+        <a href="#contact"><span class="micro">05</span>Contact</a>
       </nav>
       <div class="menu__foot">
         <a class="btn btn--accent" href="#contact">Start a project <span aria-hidden="true">↗</span></a>
@@ -814,6 +816,267 @@
           </div>
         </div>
       </section>
+
+      <!-- ARCADE -->
+      <section class="section arcade" id="arcade" aria-labelledby="arcade-title">
+        <div class="container">
+          <div class="section-head" data-reveal>
+            <span class="micro">08 — CODE BUILTS ARCADE</span>
+            <p class="section-head__note">
+              Take a little break. Your next project might get a little cheaper.
+            </p>
+          </div>
+
+          <div class="arcade__head" data-reveal>
+            <div>
+              <h2 class="h2 arcade__title" id="arcade-title">
+                <span class="line-mask"><span style="--d: 40ms">GOT 30</span></span>
+                <span class="line-mask"><span style="--d: 140ms">SECONDS?</span></span>
+              </h2>
+              <p class="arcade__tag">
+                <span class="arcade__tag-dot" aria-hidden="true"></span>
+                PLAY. SCORE. SAVE.
+              </p>
+            </div>
+
+            <div class="arcade__lede">
+              <p class="lead">
+                Keep the ball alive. Every return is 10 points — 100 points unlocks 2% off your
+                next project, 400+ unlocks the full 10%.
+              </p>
+              <ul class="arcade__tiers" data-arcade-tiers aria-label="Score rewards">
+                <li><span>100</span><b>2% OFF</b></li>
+                <li><span>200</span><b>5% OFF</b></li>
+                <li><span>300</span><b>7% OFF</b></li>
+                <li><span>400</span><b>10% OFF</b></li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="arcade__shell" data-arcade data-reveal>
+            <div class="arcade__bar">
+              <div class="arcade__wordmark">
+                <img src="/img/logo-mark-light.webp" width="753" height="335" alt="" />
+                <span>CODE BUILTS <em>ARCADE</em></span>
+              </div>
+              <dl class="arcade__stats">
+                <div>
+                  <dt class="micro">SCORE</dt>
+                  <dd data-arcade-score>000</dd>
+                </div>
+                <div>
+                  <dt class="micro">BEST</dt>
+                  <dd data-arcade-best>000</dd>
+                </div>
+              </dl>
+            </div>
+
+            <div class="arcade__stage">
+              <canvas
+                class="arcade__canvas"
+                data-arcade-canvas
+                role="img"
+                aria-label="Arcade game area. Move the paddle with the left and right arrow keys, A and D, your mouse or a finger, and keep the ball in play."
+              ></canvas>
+              <div class="arcade__scan" aria-hidden="true"></div>
+
+              <div class="arcade__overlay" data-arcade-overlay="intro">
+                <p class="micro arcade__overlay-eyebrow">CREATIVE BREAK / 01</p>
+                <h3 class="arcade__overlay-title">GOT 30 SECONDS?</h3>
+                <p class="arcade__overlay-copy">
+                  Every paddle return scores. The ball gets faster as you go. Miss it and the run
+                  ends.
+                </p>
+                <button class="btn btn--accent" type="button" data-arcade-start>
+                  START GAME <span class="btn__arrow" aria-hidden="true">↗</span>
+                </button>
+                <p class="micro arcade__hint">← → · A D · MOUSE · TOUCH</p>
+                <p class="micro arcade__status" data-arcade-status role="status" aria-live="polite"></p>
+              </div>
+
+              <div class="arcade__overlay" data-arcade-overlay="paused" hidden>
+                <p class="micro arcade__overlay-eyebrow">TAKE YOUR TIME</p>
+                <h3 class="arcade__overlay-title">PAUSED</h3>
+                <button class="btn btn--accent" type="button" data-arcade-resume>RESUME</button>
+              </div>
+
+              <div class="arcade__overlay arcade__overlay--result" data-arcade-overlay="result" hidden>
+                <p class="micro arcade__overlay-eyebrow" data-arcade-label>GAME OVER</p>
+                <h3 class="arcade__overlay-title" data-arcade-verdict>YOUR SCORE: 0</h3>
+                <p class="arcade__overlay-copy" data-arcade-verdict-copy>
+                  Nice try. Every great developer starts somewhere.
+                </p>
+
+                <div class="arcade__reward" data-arcade-reward hidden>
+                  <span class="micro">YOU UNLOCKED</span>
+                  <p class="arcade__discount"><b data-arcade-discount>2</b><span>% OFF</span></p>
+                  <p class="micro" data-arcade-reward-note></p>
+                </div>
+
+                <div class="arcade__actions">
+                  <button class="btn btn--accent" type="button" data-arcade-claim hidden>
+                    CLAIM YOUR REWARD
+                  </button>
+                  <button class="btn btn--ghost" type="button" data-arcade-again>PLAY AGAIN</button>
+                </div>
+                <p class="micro arcade__status" data-arcade-status role="status" aria-live="polite"></p>
+              </div>
+
+              <div class="arcade__overlay arcade__overlay--panel" data-arcade-overlay="claim" hidden>
+                <div class="arcade__panel">
+                  <p class="micro arcade__overlay-eyebrow">CLAIM YOUR REWARD</p>
+                  <h3 class="arcade__overlay-title">WHERE SHOULD WE SEND IT?</h3>
+                  <p class="arcade__overlay-copy">
+                    We use these details only to issue this one coupon and reply if you contact us.
+                    No account, no newsletter.
+                  </p>
+                  <form class="arcade__form" data-arcade-claim-form novalidate>
+                    <div class="field">
+                      <label for="arcade-name">Name <span aria-hidden="true">*</span></label>
+                      <input id="arcade-name" name="name" type="text" autocomplete="name" required />
+                    </div>
+                    <div class="field">
+                      <label for="arcade-email">Email <span aria-hidden="true">*</span></label>
+                      <input id="arcade-email" name="email" type="email" autocomplete="email" required />
+                    </div>
+                    <div class="field">
+                      <label for="arcade-phone">Phone <span class="field__opt">(optional)</span></label>
+                      <input id="arcade-phone" name="phone" type="tel" autocomplete="tel" inputmode="tel" />
+                    </div>
+                    <p class="arcade__form-error" data-arcade-claim-error role="alert"></p>
+                    <div class="arcade__actions">
+                      <button class="btn btn--accent" type="submit" data-arcade-claim-submit>
+                        GENERATE MY COUPON
+                      </button>
+                      <button class="btn btn--ghost" type="button" data-arcade-claim-back>BACK</button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+
+              <div class="arcade__overlay arcade__overlay--panel" data-arcade-overlay="coupon" hidden>
+                <div class="arcade__panel arcade__panel--coupon">
+                  <p class="micro arcade__overlay-eyebrow">CONGRATULATIONS!</p>
+                  <h3 class="arcade__overlay-title">YOUR REWARD IS READY.</h3>
+                  <p class="arcade__coupon-discount"><b data-arcade-coupon-discount>10</b>% OFF</p>
+                  <p class="micro arcade__coupon-label">COUPON CODE</p>
+                  <p class="arcade__code" data-arcade-coupon-code>CB-10-XXXXXX</p>
+                  <button class="btn btn--ghost" type="button" data-arcade-copy>COPY COUPON</button>
+                  <p class="micro" data-arcade-coupon-expiry></p>
+                  <p class="micro arcade__coupon-note" data-arcade-coupon-note></p>
+                  <div class="arcade__actions">
+                    <a
+                      class="btn btn--accent"
+                      data-arcade-contact
+                      href="https://wa.me/919678524939"
+                      target="_blank"
+                      rel="noopener"
+                      >CONTACT CODE BUILTS <span class="btn__arrow" aria-hidden="true">↗</span></a
+                    >
+                    <button class="btn btn--ghost" type="button" data-arcade-again>PLAY AGAIN</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="arcade__tools">
+              <button class="arcade__tool" type="button" data-arcade-pause aria-pressed="false">
+                PAUSE
+              </button>
+              <button class="arcade__tool" type="button" data-arcade-sound aria-pressed="false">
+                SOUND OFF
+              </button>
+              <button class="arcade__tool" type="button" data-arcade-restart>RESTART</button>
+              <p class="micro arcade__tools-note">ESC PAUSES · SCORES ARE VERIFIED BY THE SERVER</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- LETTER -->
+      <section class="section letter-section" id="letter" aria-labelledby="letter-title">
+        <div class="container">
+          <div class="letter" data-letter>
+            <div class="letter__intro" data-letter-intro>
+              <div class="letter__intro-top">
+                <span class="micro">09 — A LETTER FROM CODE BUILTS</span>
+                <span class="letter__stamp micro">SEALED · FOR VISITORS</span>
+              </div>
+              <h2 class="h2 letter__title" id="letter-title">
+                <span class="line-mask"><span style="--d: 40ms">A MESSAGE</span></span>
+                <span class="line-mask"><span style="--d: 140ms">FOR YOU.</span></span>
+              </h2>
+              <p class="letter__kicker">
+                Not everything needs to be sold.<br />
+                Sometimes, we just want to say something.
+              </p>
+              <button class="btn btn--accent" type="button" data-letter-open>
+                OPEN THE LETTER <span class="btn__arrow" aria-hidden="true">↗</span>
+              </button>
+              <a class="letter__full micro" href="/the-letter">OR READ IT AS A FULL PAGE ↗</a>
+            </div>
+
+            <article class="letter__paper" data-letter-paper hidden aria-labelledby="letter-title">
+              <div class="letter__toolbar" role="group" aria-label="Letter controls">
+                <button class="letter__tool" type="button" data-letter-pause aria-pressed="false">
+                  PAUSE
+                </button>
+                <button class="letter__tool" type="button" data-letter-skip>SKIP</button>
+                <button class="letter__tool" type="button" data-letter-restart>RESTART</button>
+                <button class="letter__tool" type="button" data-letter-sound aria-pressed="false">
+                  SOUND OFF
+                </button>
+              </div>
+
+              <div class="letter__body" data-letter-body>
+                <p class="letter__salutation" data-letter-line>Dear Visitor,</p>
+                <p class="letter__line" data-letter-line>
+                  First of all, thank you for being here.
+                </p>
+                <p class="letter__line" data-letter-line>
+                  The internet is filled with websites. But we believe not every website needs to
+                  look or feel the same.
+                </p>
+                <p class="letter__line" data-letter-line>
+                  We believe in ideas that challenge the ordinary. In technology that solves real
+                  problems. In experiences that make people stop, explore, and remember.
+                </p>
+                <p class="letter__line letter__line--strong" data-letter-line>
+                  That's what CODE BUILTS stands for.
+                </p>
+                <p class="letter__line" data-letter-line>
+                  We are here to turn ideas into digital experiences, build intelligent systems, and
+                  create things that make a difference.
+                </p>
+                <p class="letter__line" data-letter-line>
+                  Every project starts with an idea. Every idea deserves the right execution.
+                </p>
+                <p class="letter__line" data-letter-line>
+                  And perhaps, the next great idea we'll build will be yours.
+                </p>
+                <p class="letter__line" data-letter-line>
+                  Until then, keep creating, keep exploring, and never settle for ordinary.
+                </p>
+                <p class="letter__signoff" data-letter-line>With appreciation,</p>
+                <p class="letter__signature" data-letter-signature>TEAM CODE BUILTS.</p>
+              </div>
+
+              <div class="letter__closing" data-letter-closing hidden>
+                <p class="micro letter__closing-line">
+                  THANK YOU FOR BEING PART OF OUR LITTLE CORNER OF THE INTERNET.
+                </p>
+                <div class="letter__actions">
+                  <a class="btn btn--accent" href="#contact" data-letter-cta>
+                    LET'S BUILD SOMETHING <span class="btn__arrow" aria-hidden="true">↗</span>
+                  </a>
+                  <button class="btn btn--ghost" type="button" data-letter-top>BACK TO TOP</button>
+                </div>
+                <a class="letter__full micro" href="/the-letter">OPEN THE LETTER PAGE ↗</a>
+              </div>
+            </article>
+          </div>
+        </div>
+      </section>
     </main>
 
     <!-- FOOTER -->
@@ -829,8 +1092,10 @@
               <span class="micro">NAVIGATE</span>
               <a href="#top">Home</a>
               <a href="#services">Services</a>
+              <a href="#arcade">Arcade</a>
               <a href="#about">About</a>
               <a href="#contact">Contact</a>
+              <a href="/the-letter">The Letter</a>
             </div>
             <div class="footer__col">
               <span class="micro">SERVICES</span>

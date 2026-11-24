@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>A Letter From CODE BUILTS</title>
+    <meta
+      name="description"
+      content="A message from CODE BUILTS to everyone who visits: not everything needs to be sold. Sometimes, we just want to say something."
+    />
+    <meta name="theme-color" content="#ffffff" />
+    <meta name="color-scheme" content="light" />
+    <meta name="author" content="CODE BUILTS" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="CODE BUILTS" />
+    <meta property="og:title" content="A Letter From CODE BUILTS" />
+    <meta
+      property="og:description"
+      content="Not everything needs to be sold. Sometimes, we just want to say something."
+    />
+    <meta property="og:image" content="/img/og.jpg" />
+
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <link rel="icon" href="/img/favicon-32.png" type="image/png" sizes="32x32" />
+    <link rel="apple-touch-icon" href="/img/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <link rel="preload" as="image" href="/img/logo-lockup.webp" fetchpriority="high" />
+
+    <script type="module" src="/src/letter-page.ts"></script>
+  </head>
+  <body class="letter-page">
+    <a class="skip-link" href="#letter-main">Skip to the letter</a>
+
+    <header class="letter-page__nav">
+      <a class="nav__logo" href="/" aria-label="CODE BUILTS — back to the site">
+        <img src="/img/logo-lockup.webp" width="800" height="358" alt="CODE BUILTS" />
+      </a>
+      <nav class="letter-page__nav-links" aria-label="Secondary">
+        <a href="/">Home</a>
+        <a href="/#arcade">Arcade</a>
+        <a href="/#contact">Contact</a>
+      </nav>
+    </header>
+
+    <main class="letter-page__main" id="letter-main">
+      <div class="container">
+        <div class="letter" data-letter>
+          <div class="letter__intro" data-letter-intro>
+            <div class="letter__intro-top">
+              <span class="micro">A LETTER FROM CODE BUILTS</span>
+              <span class="letter__stamp micro">SEALED · FOR VISITORS</span>
+            </div>
+            <p class="micro">CODE BUILTS</p>
+            <h1 class="h2 letter__title">
+              <span class="line-mask"><span style="--d: 40ms">A MESSAGE</span></span>
+              <span class="line-mask"><span style="--d: 140ms">FOR YOU.</span></span>
+            </h1>
+            <p class="letter__kicker">
+              Not everything needs to be sold.<br />
+              Sometimes, we just want to say something.
+            </p>
+            <button class="btn btn--accent" type="button" data-letter-open>
+              OPEN THE LETTER <span class="btn__arrow" aria-hidden="true">↗</span>
+            </button>
+            <a class="letter__full micro" href="/">BACK TO THE SITE ↗</a>
+          </div>
+
+          <article class="letter__paper" data-letter-paper hidden aria-labelledby="letter-heading">
+            <h1 class="letter__sr-title" id="letter-heading">A letter from CODE BUILTS</h1>
+            <div class="letter__toolbar" role="group" aria-label="Letter controls">
+              <button class="letter__tool" type="button" data-letter-pause aria-pressed="false">
+                PAUSE
+              </button>
+              <button class="letter__tool" type="button" data-letter-skip>SKIP</button>
+              <button class="letter__tool" type="button" data-letter-restart>RESTART</button>
+              <button class="letter__tool" type="button" data-letter-sound aria-pressed="false">
+                SOUND OFF
+              </button>
+            </div>
+
+            <div class="letter__body" data-letter-body>
+              <p class="letter__salutation" data-letter-line>Dear Visitor,</p>
+              <p class="letter__line" data-letter-line>First of all, thank you for being here.</p>
+              <p class="letter__line" data-letter-line>
+                The internet is filled with websites. But we believe not every website needs to
+                look or feel the same.
+              </p>
+              <p class="letter__line" data-letter-line>
+                We believe in ideas that challenge the ordinary. In technology that solves real
+                problems. In experiences that make people stop, explore, and remember.
+              </p>
+              <p class="letter__line letter__line--strong" data-letter-line>
+                That's what CODE BUILTS stands for.
+              </p>
+              <p class="letter__line" data-letter-line>
+                We are here to turn ideas into digital experiences, build intelligent systems, and
+                create things that make a difference.
+              </p>
+              <p class="letter__line" data-letter-line>
+                Every project starts with an idea. Every idea deserves the right execution.
+              </p>
+              <p class="letter__line" data-letter-line>
+                And perhaps, the next great idea we'll build will be yours.
+              </p>
+              <p class="letter__line" data-letter-line>
+                Until then, keep creating, keep exploring, and never settle for ordinary.
+              </p>
+              <p class="letter__signoff" data-letter-line>With appreciation,</p>
+              <p class="letter__signature" data-letter-signature>TEAM CODE BUILTS.</p>
+            </div>
+
+            <div class="letter__closing" data-letter-closing hidden>
+              <p class="micro letter__closing-line">
+                THANK YOU FOR BEING PART OF OUR LITTLE CORNER OF THE INTERNET.
+              </p>
+              <div class="letter__actions">
+                <a class="btn btn--accent" href="/#contact">
+                  LET'S BUILD SOMETHING <span class="btn__arrow" aria-hidden="true">↗</span>
+                </a>
+                <button class="btn btn--ghost" type="button" data-letter-top>BACK TO TOP</button>
+              </div>
+            </div>
+          </article>
+        </div>
+      </div>
+    </main>
+
+    <footer class="letter-page__foot">
+      <span>© <span data-el="year">2026</span> CODE BUILTS. BUILD SMART. BUILD BETTER.</span>
+      <span>
+        <a href="mailto:code.builts@gmail.com">code.builts@gmail.com</a>
+      </span>
+    </footer>
+  </body>
+</html>

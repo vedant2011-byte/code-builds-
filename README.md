@@ -1,53 +1,281 @@
 # CODE BUILTS — Build Smart. Build Better.
 
-A production website for CODE BUILTS: a cinematic brand intro (two reconstructed films), a
-four-step scroll film, and a full editorial agency site.
+The CODE BUILTS site: a cinematic brand intro (two reconstructed films), a four-step scroll film,
+a full editorial agency site — followed by **CODE BUILTS ARCADE**, **A LETTER FROM CODE BUILTS**,
+and a private **admin portal** with a real backend, database, rewards and coupons.
 
-Built with **Vite + TypeScript + hand-authored CSS**. No UI framework, no runtime animation
-library. Self-hosted Geist. Everything ships as static files.
+Frontend: **Vite + TypeScript + hand-authored CSS**. No UI framework, no runtime animation library,
+self-hosted Geist. Backend: **Cloudflare Worker + D1 (SQLite)**, hand-written routing, WebCrypto,
+no runtime dependencies. Everything shares the same design tokens.
 
 ```bash
 npm install
-npm run dev       # http://localhost:5173
-npm run build     # typecheck + production build to dist/
-npm run preview   # serve dist/
+npm run dev        # site      → http://127.0.0.1:5173  (proxies /api to :8787)
+npm run dev:api    # Worker    → http://127.0.0.1:8787  (local D1)
+npm run build      # typecheck + site build + Worker bundle
+npm run typecheck  # site and Worker
 ```
+
+The arcade needs both processes: the game's score, session and coupon live in the Worker.
 
 ---
 
-## 1. The intro
+## 1. The intro (unchanged)
 
 `src/intro.ts` runs one deterministic sequence:
 
 | Stage | What happens |
 | --- | --- |
-| Loader | Real asset progress: logo decode, font loading, and the actual bytes of `film-01.mp4` (streamed via XHR into a blob). Minimum display ~1.1 s to avoid a flash, no fake timer. |
+| Loader | Real asset progress: logo decode, font loading, and the actual bytes of `film-01.mp4`. Minimum display ~1.1 s, no fake timer. |
 | Film 01 | `film-01.mp4` autoplays muted, inline. The progress rail tracks real playback. On end → Film 02. |
-| Film 02 | Four **scroll** steps. Each scroll gesture (wheel, swipe or ArrowDown/PageDown) plays one chapter of the same continuous camera move (`0–2.5s`, `2.5–5.3s`, `5.3–7.9s`, `7.9–9.96s`), seeks within a single preloaded `<video>` element, and pauses at the next hold point. The fourth chapter opens the site. |
-| Site | Overlay is removed, scroll unlocks, nav drops in. |
+| Film 02 | Four **scroll** steps (wheel, swipe, ArrowDown/PageDown). Each plays one chapter of the same continuous camera move and pauses at the next hold point. The fourth opens the site. |
+| Site | Overlay removed, scroll unlocked, nav drops in. |
 
-Framing: the source footage is portrait (720×1280) and fills the viewport edge to edge at every
-size. Phones show the native 9:16 frame; from 901 px up the same video is reframed for landscape
-(`object-fit: cover` with a lifted `object-position` per film, so the subject stays in shot) and the
-chapter rails overlay the image. Nothing is stretched and no second encode exists.
+Framing: the source footage is portrait (720×1280). Phones show the native 9:16 frame; from
+901 px up the same video is reframed for landscape (`object-fit: cover` with a lifted
+`object-position` per film). The sequence plays in full — there are no skip buttons. Escape
+hatches exist only for failure: autoplay blocked, download/decode failure, reduced motion,
+data-saver, no JavaScript, an 18 s watchdog, and a 16 s idle auto-advance in film 02.
 
-The sequence plays in full — there are no skip buttons. Escape hatches exist only for failure:
+## 2. Site ending sequence
 
-- Autoplay blocked → an in-frame fallback with **Play film / Continue to site**.
-- Download or decode failure → poster + fallback, never a dead screen.
-- `prefers-reduced-motion: reduce` → loader then straight to the site.
-- Data-saver / 2G → loader then straight to the site.
-- No JavaScript → the intro is never displayed (`.js` class gate) and the site renders normally.
-- An 18 s watchdog releases the page if the intro engine never starts.
-- Film 02 advances on its own after 16 s of no interaction, so the story never stalls.
+```
+EXISTING SITE (hero → services → approach → mission → vision → statement → contact)
+        ↓
+CODE BUILTS ARCADE              #arcade
+        ↓
+A LETTER FROM CODE BUILTS       #letter  (and /the-letter)
+        ↓
+EXISTING FOOTER
+```
 
-Each scene must be seen: the loader cannot be skipped, film 01 advances on its own, and film 02
-moves on when the visitor scrolls (or after 16 s of no interaction).
+Navigation gained one link (`Arcade`); the footer NAVIGATE column gained `Arcade` and `The Letter`.
+Nothing else in the existing sections, services, copy, CTAs or animations was changed.
 
-## 2. Media pipeline (already run)
+## 3. CODE BUILTS ARCADE
 
-Source: the two supplied ZIPs — 300 JPG frames each, 720×1280, 30 FPS (one continuous shot per
-film, frames in order `001–300`).
+`src/arcade.ts` + `src/styles/arcade.css`, markup in `index.html` (`#arcade`), rules in
+`shared/arcade.ts`.
+
+- Canvas 2D, `requestAnimationFrame`, one loop, no engine. DPR capped at 2, resized with a
+  `ResizeObserver`, listeners cleaned up by living on the section instance.
+- Controls: ← →, A/D, mouse movement, touch drag (`touch-action: none`, so the page never
+  scrolls under a drag). Escape or the toolbar pauses; the game pauses itself when scrolled away
+  or when the tab is hidden.
+- Difficulty: ball speed starts at ~0.92 × canvas height per second (+20% on *challenging*,
+  −18% on *relaxed*) and gains 4.5% per return, capped at 2.35×. A typical run lasts 30–45 s;
+  skilled players keep going.
+- Sound is off by default (WebAudio blips, preference stored locally). Reduced motion removes the
+  trail and glow; the game itself still works.
+- Personal best is stored locally (`cb.arcade.best`) and is a convenience only — rewards always
+  come from the server-verified score.
+
+Scoring: **10 points per verified paddle return**. 100 → 2%, 200 → 5%, 300 → 7%, 400+ → 10%.
+Reward tiers, difficulty, validity and eligibility are all editable in the admin settings.
+
+### How the score is actually verified
+
+The browser is never trusted with a score. `POST /api/arcade/sessions` creates a session row with
+a random token (only its SHA-256 is stored). While playing, the game posts accepted bounces in
+batches (`{seq, t}`, `t` = ms since start). The Worker:
+
+1. checks the token, session state and expiry;
+2. requires contiguous sequence numbers and strictly increasing timestamps with at least
+   **120 ms between bounces** (faster than a paddle return can physically happen);
+3. rejects timestamps in the future beyond a 2 s clock tolerance, or past the 4-minute cap;
+4. refuses a batch containing more bounces than the elapsed wall-clock time allows;
+5. **counts the accepted events itself** and derives `score = bounces × 10` — the client-submitted
+   number is never used;
+6. on finish, re-checks the duration against the event log and the wall clock, and flags
+   impossible runs.
+
+A flagged session is stored (with reasons) for review, cannot produce a coupon, and appears in the
+admin dashboard. Rate limits: 40 sessions/hour per IP, 6 claims/hour per IP and 5 claims/day per
+email. A `UNIQUE` constraint on `reward_claims.session_id` makes duplicate claims impossible.
+
+**Limitation, stated plainly:** this is a server-checked, server-counted game, not an
+uncheatable one. A determined person can script plausible bounce timings to a public API. The
+checks raise the cost and make fraud visible, and the admin can reject/revoke anything it issues.
+
+## 4. Rewards and coupons
+
+- Each eligible claim creates a player record (email is unique, case-insensitive), a pending claim,
+  and a coupon code in the format `CB-<discount>-XXXXXX` (unambiguous alphabet, generated with
+  `crypto.getRandomValues`, uniqueness checked in the database).
+- Coupons are issued **active** immediately because the session was verified; the claim itself
+  stays `pending` in the admin until reviewed. Rejecting a claim revokes its coupon; a rejected
+  claim can never produce a redeemable coupon.
+- Each coupon snapshots its own terms — discount, issue date, expiry, validity days, minimum
+  project value, max uses and eligible services — so changing settings later never alters an
+  existing coupon.
+- Status lifecycle: `PENDING → ACTIVE → REDEEMED`, plus `EXPIRED` (computed on read and refused at
+  redemption) and `REVOKED`.
+- Redemption is a separate, explicit step. Winning is not buying: an admin records the actual
+  purchase (service, original amount, reference), and the coupon then shows `REDEEMED` with the
+  discount amount and final price. Redemption is transactional: guarded `INSERT … SELECT`,
+  `UNIQUE(coupon_id)` plus a conditional update, so it cannot happen twice.
+- The coupon card offers a copy button and a WhatsApp hand-off that pre-fills the code — the same
+  contact channel the existing enquiry form uses.
+
+## 5. A LETTER FROM CODE BUILTS
+
+`src/letter.ts` + `src/styles/letter.css`; used by the homepage `#letter` section and the
+dedicated `/the-letter` page (`the-letter.html`, `src/letter-page.ts`).
+
+- Initial screen: CODE BUILTS / A MESSAGE FOR YOU + *"Not everything needs to be sold…"* and an
+  **OPEN THE LETTER** button.
+- Character-by-character typing with jittered speed, longer pauses at punctuation, a blinking
+  cursor, paragraph fades, pause/resume, skip, restart and optional typing sound (off by default,
+  remembered locally).
+- `prefers-reduced-motion` reveals the whole letter instantly with the same ending.
+- After the last line the cursor disappears, the signature fades in, then the closing message and
+  two buttons: **LET'S BUILD SOMETHING** (→ contact on the homepage) and **BACK TO TOP**.
+- The homepage version links to the full-page version, and vice versa.
+
+## 6. Admin portal
+
+Routes: `/admin/login` and `/admin/arcade` (served by `admin.html`; the Worker rewrites the clean
+URLs and sends `noindex`). Client code in `src/admin/`, styles in `src/styles/admin.css`.
+
+- **Overview** — sessions, players, winners, coupons, pending claims, redemptions, discount given,
+  flagged sessions, plus charts for sessions/claims over time, reward distribution, redemption
+  rate and highest scores. Every number is an SQL aggregate.
+- **Winners & claims** — searchable, sortable, filterable table (verification, reward, coupon
+  state), row-level detail with player, session, events, coupon, redemption, previous claims,
+  notes and the decision history.
+- **Winner detail** — approve, reject (reason required), revoke the coupon, record a redemption,
+  add internal notes. Every action is written to the audit log.
+- **Game sessions** — every run, its timing checks and suspicion reasons.
+- **Players**, **Coupons** (search/status/reward filters, manual issue, revoke, redeem),
+  **Redemptions** (real purchases only), **Audit log** (append-only), **Settings**.
+- CSV export for players, sessions, winners, coupons and redemptions.
+- Responsive: off-canvas sidebar, tables scroll inside their own container, no page-level
+  horizontal overflow at 390 px.
+
+### Authentication
+
+- Single administrator configured entirely by secrets: `ADMIN_EMAIL`, `ADMIN_PASSWORD_HASH`,
+  `SESSION_SECRET`. There is no registration page and no default password.
+- Password hashes are PBKDF2-SHA-256, 210 000 iterations, generated by
+  `npm run admin:hash -- "a long passphrase"`; verification happens in the Worker with constant-time
+  comparison. The password itself is never stored.
+- Sessions: random id, HMAC-SHA-256 signed cookie (`HttpOnly`, `SameSite=Strict`, `Secure` on
+  HTTPS), 12-hour expiry, revocable server-side (`admin_sessions.revoked`), stored hashed IP.
+- Login rate limit: 10 attempts/15 min per IP and 6/15 min per email, enforced with an atomic D1
+  counter.
+- CSRF: same-origin check against `APP_ORIGIN` **plus** a required `X-CB-Request: 1` header on every
+  mutation, alongside the strict cookie.
+- Every admin route and export requires a valid session; `GET /api/admin/*` without a cookie
+  returns 401. The audit log has no update or delete endpoint.
+
+## 7. API
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/api/arcade/config` | Public settings, tiers, eligibility |
+| POST | `/api/arcade/sessions` | Start a verified session |
+| POST | `/api/arcade/sessions/:id/events` | Submit bounce events (token required) |
+| POST | `/api/arcade/sessions/:id/finish` | Close the run, get the verified score and reward |
+| POST | `/api/arcade/claims` | Claim a reward, issue the coupon |
+| POST | `/api/admin/login` · `/logout` | Admin session |
+| GET | `/api/admin/session` | Current admin |
+| GET | `/api/admin/overview?days=30` | Dashboard aggregates + series |
+| GET | `/api/admin/claims` · `/claims/:id` | Winners list and detail |
+| POST | `/api/admin/claims/:id/verify` · `/reject` · `/notes` | Review workflow |
+| GET/POST | `/api/admin/coupons` | List / issue manually |
+| POST | `/api/admin/coupons/:id/revoke` · `/redeem` | Coupon lifecycle |
+| GET | `/api/admin/redemptions` | Recorded purchases |
+| GET/PUT | `/api/admin/settings` | Arcade configuration |
+| GET | `/api/admin/audit` | Audit log |
+| GET | `/api/admin/export/{players\|sessions\|winners\|coupons\|redemptions}` | CSV |
+
+All API responses are `no-store`; public mutations are same-origin only.
+
+## 8. Database
+
+SQLite (Cloudflare D1). Tables: `players`, `game_sessions`, `game_events`, `reward_claims`,
+`coupons`, `redemptions`, `settings`, `admin_notes`, `audit_log`, `admin_sessions`, `rate_limits`.
+Foreign keys, unique constraints (player email, claim→session, coupon code, redemption→coupon),
+indexes on every queried column, integer timestamps, whole-rupee amounts, and transactions via
+`db.batch()`.
+
+`schema` lives in `migrations/0001_init.sql` **and** in `worker/src/db.ts`, which applies it
+idempotently on the first API request — so a fresh database from a deployment is usable without a
+manual step. Apply manually if you prefer:
+
+```bash
+npm run db:migrate:local                                     # local D1
+npx wrangler d1 execute code-builts-arcade --remote \
+  --file=migrations/0001_init.sql --config wrangler.jsonc    # deployed D1
+```
+
+## 9. Local setup
+
+1. `npm install`
+2. `cp .dev.vars.example .dev.vars`, then generate the hash:
+   `npm run admin:hash -- "a long local passphrase"` and paste it into `.dev.vars`, along with
+   `ADMIN_EMAIL`, a random `SESSION_SECRET`, and `APP_ORIGIN` (defaults are in the example file).
+3. `npm run dev:api` (Worker + local D1 on :8787) and `npm run dev` (site on :5173).
+
+`.dev.vars` is git-ignored; never commit it.
+
+## 10. Deployment
+
+Build first (the Worker bundle is generated, not committed):
+
+```bash
+npm run build     # dist/ + worker/dist/index.js
+```
+
+**Cloudflare directly**
+
+```bash
+npx wrangler d1 create code-builts-arcade        # copy the database_id into wrangler.jsonc
+npx wrangler secret put ADMIN_EMAIL
+npx wrangler secret put ADMIN_PASSWORD_HASH
+npx wrangler secret put SESSION_SECRET
+npx wrangler secret put APP_ORIGIN               # e.g. https://codebuilts.com
+npx wrangler deploy --config wrangler.jsonc
+```
+
+**Freebuff Sites** — add a D1 database with binding `DB` to the environment, then deploy the
+prebuilt manifest in `deploy.json` (`worker/dist/index.js` + `dist/`). Sites injects `DB`,
+`APP_ORIGIN` and the platform variables; set the three admin secrets in Sites → Secrets, then
+deploy once so the schema initialises on the first request.
+
+Required variables:
+
+| Name | Purpose |
+| --- | --- |
+| `ADMIN_EMAIL` | The only administrator address |
+| `ADMIN_PASSWORD_HASH` | `pbkdf2$sha256$210000$…` from `npm run admin:hash` |
+| `SESSION_SECRET` | Long random string that signs the admin cookie |
+| `APP_ORIGIN` | Allowed origin(s), comma separated (Sites injects this) |
+| `ENVIRONMENT` | Optional label |
+
+The Worker serves `/the-letter`, `/admin/*` and `/api/*` itself and falls through to `dist/` for
+everything else, so the deployment must route unknown paths to the Worker (assets with
+`run_worker_first` in `wrangler.jsonc`, or the Sites manifest).
+
+## 11. Before launch / known limitations
+
+- Update `https://codebuilts.com` in `public/sitemap.xml` and `public/robots.txt` to the real domain.
+- `wrangler.jsonc` carries a placeholder `database_id` for local dev — replace it for direct
+  Wrangler deployments (Sites supplies its own binding).
+- The contact form still hands the enquiry to WhatsApp/email exactly as before; it does not post to
+  the Worker. The coupon card reuses the same WhatsApp number.
+- Arcade scores are server-checked (see §3) but not uncheatable; review flagged sessions and
+  pending claims in the admin.
+- Automated coverage is the API/integration suite (`npm run test:api`, 63 assertions) plus type and
+  production builds. The canvas game loop, typewriter animation and CSS transitions run on
+  `requestAnimationFrame`/timers and were not exercised visually in the last run (the shared
+  browser tab reported `visibilityState: "hidden"`, which freezes both). Play a full run and open
+  the letter once in a normal browser tab before launch.
+- The intro media pipeline below is unchanged and still the source of truth for the films.
+
+## 12. Media pipeline (already run)
+
+Source: the two supplied ZIPs — 300 JPG frames each, 720×1280, 30 FPS.
 
 ```bash
 # 1. Extract (originals kept in the project root)
@@ -55,67 +283,40 @@ unzip -q clean_Miniature_workers_building_typew_f67b49b01-ezgif-split.zip -d ass
 unzip -q clean_Typewriter_miniature_constructio_7105981f-ezgif-split.zip -d assets/frames/v2
 
 # 2. Rebuild at exactly 30 FPS, native 720×1280, H.264 / yuv420p / faststart.
-#    The source frames carry heavy grain, which reads as noise once the film is
-#    full-bleed, so the chain is: non-local means denoise → gentle sharpen → CRF 23.
-#    (hqdn3d smeared the miniature detail; a bare CRF pass kept the grain.)
+#    Denoise → gentle sharpen → CRF 23 (the source grain reads as noise when full-bleed).
 ffmpeg -framerate 30 -i assets/frames/v1/ezgif-frame-%03d.jpg \
   -vf "nlmeans=s=7:p=5:r=13,unsharp=5:5:0.6:5:5:0,format=yuv420p" \
   -c:v libx264 -profile:v high -level 4.0 -crf 23 -preset slow \
   -g 30 -keyint_min 30 -sc_threshold 0 -movflags +faststart -an public/media/film-01.mp4
-
-# 3. Identical chain for v2 → public/media/film-02.mp4 (nlmeans is slow: ~2 min each)
 ```
 
-Verified output (`ffprobe -count_frames`):
+`film-01.mp4` — 300 frames, 30 fps, 10.000 s, 720×1280, 4.1 MB.
+`film-02.mp4` — 300 frames, 30 fps, 10.000 s, 720×1280, 7.4 MB.
+Posters are frame 001 through the same chain. WebM/VP9 tested larger for this footage.
 
-- `film-01.mp4` — 300 frames, 30/1 fps, 10.000 s, 720×1280, 4.1 MB, CRF 23, denoised
-- `film-02.mp4` — 300 frames, 30/1 fps, 10.000 s, 720×1280, 7.4 MB, CRF 23, denoised
-
-Posters (`film-01-poster.jpg`, `film-02-poster.jpg`) are frame 001 of each film, run through the same
-denoise/sharpen chain and exported at `-q:v 3` so the first paint matches the video; the hero still
-comes from a later frame of film 01. WebM/VP9 was tested and produced
-*larger* files than H.264 for this footage, so only MP4 is shipped. The extracted frame
-folders (`assets/frames/`) were removed after verification; the original ZIPs are untouched
-and remain the source of truth.
-
-## 3. Form behaviour (read this before launch)
-
-There is **no backend**, and the form does not pretend otherwise.
-
-On a valid submit it composes the enquiry and hands it to the visitor's own WhatsApp or email
-app. The confirmation panel states plainly that nothing was transmitted by the site. Errors are
-inline, announced, and never replaced by a fake success state.
-
-To deliver enquiries server-side instead:
-
-1. Add an endpoint (e.g. `POST /api/enquiry`) on your host, validate the same fields server-side,
-   add rate limiting + a spam check, and send via your email provider.
-2. In `src/ui.ts` → `initForm()`, replace the `window.open` / `mailto:` branch with
-   `fetch('/api/enquiry', { method: 'POST', ... })` and only show success after a 2xx response.
-3. Keep the WhatsApp/email buttons as a fallback.
-
-## 4. Project map
+## 13. Project map
 
 ```
-index.html              semantic markup, SEO, JSON-LD, intro shell
-src/main.ts             entry
-src/intro.ts            loader, film state machine, four scroll chapters
-src/ui.ts               reveals, nav, menu, accordions, process timeline, form
-src/styles/base.css     tokens, type, buttons, nav, hero, footer
-src/styles/site.css     sections, services, approach, mission/vision, contact
-src/styles/intro.css    loader, cinema stage, hotspot
-public/media/           reconstructed films, posters, stills
-public/img/             logo lockup (keyed from the supplied card), white mark, icons, OG
-public/robots.txt       update the Sitemap URL to your real domain
-public/sitemap.xml      update <loc> to your real domain
+index.html                site, intro shell, arcade + letter sections, SEO
+the-letter.html           dedicated letter page
+admin.html                admin shell (served at /admin/login and /admin/arcade)
+src/main.ts               entry: UI, letter, arcade, intro
+src/intro.ts              loader, film state machine, scroll chapters
+src/ui.ts                 reveals, nav, menu, accordions, process timeline, form
+src/arcade.ts             canvas game, controls, sound, server sync, claim flow
+src/letter.ts             typewriter letter (homepage + full page)
+src/letter-page.ts        /the-letter entry
+src/admin/                api client, views, UI primitives, bootstrap/routing
+src/styles/               base, site, intro, arcade, letter, admin
+shared/arcade.ts          rules shared by browser and Worker
+worker/src/index.ts       routing, page rewrites, asset fallback
+worker/src/arcade.ts      sessions, event validation, claims, coupons
+worker/src/admin.ts       auth, dashboard queries, review, redemptions, settings, CSV
+worker/src/db.ts          schema, settings, players, audit, expiry
+worker/src/crypto.ts      tokens, HMAC, PBKDF2, constant-time compare
+worker/src/http.ts        JSON, errors, cookies, rate limits, CSV
+migrations/0001_init.sql  schema
+scripts/                  worker build, password hash, API test suite
+public/media/             films, posters, stills
+public/img/               logo lockup, white mark, icons, OG
 ```
-
-## 5. Notes before going live
-
-- Update `https://codebuilts.com` in `public/sitemap.xml` and `public/robots.txt` to the real
-  domain. `og:image` is relative; add `og:url` and an absolute `og:image` once the domain is fixed.
-- The logo is the supplied artwork, only background-keyed for placement on white/dark surfaces —
-  never redrawn, recoloured or re-typeset. Nav/loader use the mark + wordmark; the "BUILD SMART.
-  BUILD BETTER." tagline is set in site type, not baked into the logo.
-- Fonts are self-hosted and subset by unicode-range; no third-party requests at runtime.
-- Videos pause when the tab is hidden; listeners and timers are cleared when the intro finishes.
